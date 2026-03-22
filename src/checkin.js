@@ -9,8 +9,8 @@ function getRequiredEnv(name) {
 }
 
 async function run() {
-  const uid = getRequiredEnv("LUOGU_UID");
-  const clientId = getRequiredEnv("LUOGU_CLIENT_ID");
+  const uid = getRequiredEnv("_uid");
+  const clientId = getRequiredEnv("__client_id");
   const cookie = `_uid=${uid};__client_id=${clientId}`;
 
   const res = await fetch(CHECKIN_URL, {

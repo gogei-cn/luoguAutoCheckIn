@@ -6,8 +6,8 @@
 
 1. 新建一个 GitHub 仓库并推送本项目。
 2. 在仓库 `Settings -> Secrets and variables -> Actions` 中新增两个 secret：
-   - `LUOGU_UID`：洛谷 Cookie 里的 `_uid`
-   - `LUOGU_CLIENT_ID`：洛谷 Cookie 里的 `__client_id`
+   - `_uid`：洛谷 Cookie 里的 `_uid`
+   - `__client_id`：洛谷 Cookie 里的 `__client_id`
 3. 确保 Actions 已启用。
 4. 在 Actions 页面手动运行一次 `Luogu Daily Check-in` 验证。
 
@@ -17,8 +17,7 @@
 2. 在 Cookie 中找到：
    - `_uid`
    - `__client_id`
-3. `LUOGU_UID` 对应 `_uid`，`LUOGU_CLIENT_ID` 对应 `__client_id`。
-5. 将它们添加到 GitHub Secrets 中。
+3. 将它们添加到 GitHub Secrets 中。
 
 ## 定时说明
 

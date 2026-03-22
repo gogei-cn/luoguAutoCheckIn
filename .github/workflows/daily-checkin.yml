@@ -19,6 +19,6 @@ jobs:
 
       - name: Run check-in
         env:
-          LUOGU_UID: ${{ secrets.LUOGU_UID }}
-          LUOGU_CLIENT_ID: ${{ secrets.LUOGU_CLIENT_ID }}
+          _uid: ${{ secrets._uid }}
+          __client_id: ${{ secrets.__client_id }}
         run: node src/checkin.js
