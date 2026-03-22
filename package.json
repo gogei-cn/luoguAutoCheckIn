@@ -1,0 +1,13 @@
+{
+  "name": "luogu-auto-checkin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Daily auto check-in for Luogu using GitHub Actions",
+  "scripts": {
+    "checkin": "node src/checkin.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
