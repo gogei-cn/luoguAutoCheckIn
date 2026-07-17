@@ -22,3 +22,12 @@ jobs:
           _uid: ${{ secrets._uid }}
           __client_id: ${{ secrets.__client_id }}
         run: node src/checkin.js
+
+  workflow-keepalive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Keep workflow alive
+        uses: liskin/gh-workflow-keepalive@v1
