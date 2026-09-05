@@ -1,0 +1,26 @@
+node_modules/
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+vscode-luogu-developer-master/
+
+# 截图文件
+screenshots/
+*.png
+*.jpg
+*.jpeg
+
+# 日志文件
+*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
