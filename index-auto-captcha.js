@@ -161,7 +161,7 @@ async function main() {
 
     // 1. 打开洛谷首页
     console.log("步骤1: 打开洛谷首页");
-    await page.goto("https://www.luogu.com.cn", {
+    await page.goto("https://www.luogu.com", {
       waitUntil: "networkidle",
       timeout: 30000,
     });
