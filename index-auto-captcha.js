@@ -161,31 +161,43 @@ async function main() {
 
     // 1. 打开洛谷首页
     console.log("步骤1: 打开洛谷首页");
-    await page.goto("https://www.luogu.com", {
+    await page.goto("https://www.luogu.com.cn", {
       waitUntil: "networkidle",
       timeout: 30000,
     });
     await randomDelay(1000, 3000);
 
-    // 2. 点击登录按钮
-    console.log("步骤2: 点击登录按钮");
-    const loginButton = page.locator('a:has-text("登录")').first();
-    if (await loginButton.isVisible()) {
-      await randomDelay(500, 1500);
-      await loginButton.click();
-      await page.waitForLoadState("networkidle");
+    // 2. 打开登录页
+    console.log("步骤2: 打开登录页");
+    const usernameInput = page
+      .locator(
+        'input[placeholder*="用户名"], input[placeholder*="UID"], input[placeholder*="电子邮箱"]',
+      )
+      .first();
+
+    if (!(await usernameInput.isVisible().catch(() => false))) {
+      const loginButton = page
+        .locator('a[href*="login"], a:has-text("登录"), button:has-text("登录")')
+        .first();
+
+      if (await loginButton.isVisible().catch(() => false)) {
+        await randomDelay(500, 1500);
+        await loginButton.click();
+      } else {
+        console.log("未找到登录入口，直接访问登录页");
+        await page.goto("https://www.luogu.com.cn/auth/login", {
+          waitUntil: "networkidle",
+          timeout: 30000,
+        });
+      }
+
+      await usernameInput.waitFor({ state: "visible", timeout: 15000 });
       await randomDelay(1000, 2000);
-    } else {
-      console.log("未找到登录按钮，可能已经登录");
     }
 
     // 3. 输入账号
     console.log("步骤3: 输入账号");
     const username = getRequiredEnv("LUOGU_USERNAME");
-    const usernameInput = page
-      .locator('input[placeholder="用户名、UID、手机或电子邮箱"]')
-      .first();
-
     if (await usernameInput.isVisible()) {
       await usernameInput.click();
       await randomDelay(200, 500);
