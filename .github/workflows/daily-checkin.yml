@@ -36,7 +36,6 @@ jobs:
         run: npx playwright install chromium
 
       - name: Run checkin script
-        shell: pwsh
         env:
           LUOGU_USERNAME: ${{ secrets.LUOGU_USERNAME }}
           LUOGU_PASSWORD: ${{ secrets.LUOGU_PASSWORD }}
@@ -48,8 +47,8 @@ jobs:
         with:
           name: screenshots
           path: |
-            status*.png
-            error*.png
+            screenshots/
+          if-no-files-found: ignore
 
   workflow-keepalive:
     if: github.event_name == 'schedule'

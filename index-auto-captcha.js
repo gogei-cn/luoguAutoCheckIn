@@ -1,6 +1,18 @@
 const { chromium } = require("playwright");
-const fetch = require("node-fetch");
+const ort = require("onnxruntime-node");
+const sharp = require("sharp");
+const path = require("path");
 require("dotenv").config();
+
+const CAPTCHA_ALPHABET = "abcdefghijklmnopqrstuvwxyz123456789";
+const CAPTCHA_WIDTH = 90;
+const CAPTCHA_HEIGHT = 35;
+const CAPTCHA_MODEL_PATH = path.join(
+  __dirname,
+  "models",
+  "luogu-captcha-int8.onnx",
+);
+let captchaSessionPromise;
 
 function getRequiredEnv(name) {
   const value = process.env[name];
@@ -10,40 +22,62 @@ function getRequiredEnv(name) {
   return value.trim();
 }
 
-// 验证码识别函数 - 直接发送页面中已加载图片的Base64数据
+async function getCaptchaSession() {
+  if (!captchaSessionPromise) {
+    captchaSessionPromise = ort.InferenceSession.create(CAPTCHA_MODEL_PATH);
+  }
+  return captchaSessionPromise;
+}
+
+// 使用本地 ONNX 模型识别验证码
 async function recognizeCaptcha(base64Image) {
-  console.log("开始使用外部API识别验证码...");
+  console.log("开始使用本地模型识别验证码...");
 
   try {
-    // 发送请求到外部API
-    const response = await fetch("http://8.130.64.15:3636", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ image: base64Image }),
-      timeout: 5000,
-    });
+    const imageBuffer = Buffer.from(base64Image, "base64");
+    const { data } = await sharp(imageBuffer)
+      .resize(CAPTCHA_WIDTH, CAPTCHA_HEIGHT, { fit: "fill" })
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const input = new ort.Tensor(
+      "float32",
+      Float32Array.from(data, (value) => value / 255),
+      [1, CAPTCHA_HEIGHT, CAPTCHA_WIDTH, 3],
+    );
 
-    if (!response.ok) {
-      throw new Error(`API请求失败: ${response.status}`);
+    const session = await getCaptchaSession();
+    const inputName = session.inputNames[0];
+    const outputName = session.outputNames[0];
+    const output = (await session.run({ [inputName]: input }))[outputName];
+    const [batchSize, characterCount, classCount] = output.dims;
+
+    if (
+      batchSize !== 1 ||
+      characterCount !== 4 ||
+      classCount !== CAPTCHA_ALPHABET.length
+    ) {
+      throw new Error(`模型输出尺寸异常: ${output.dims.join("x")}`);
     }
 
-    const result = await response.json();
-    const captchaText = result.prediction || "";
-
-    console.log(`API识别结果: "${captchaText}"`);
-
-    // 验证码一定是4位字母或数字
-    if (captchaText.length === 4 && /^[a-zA-Z0-9]+$/.test(captchaText)) {
-      console.log(`最终验证码: "${captchaText}"`);
-      return captchaText;
-    } else {
-      throw new Error(`API返回的验证码格式不正确: ${captchaText}`);
+    const prediction = [];
+    for (let position = 0; position < characterCount; position++) {
+      const offset = position * classCount;
+      let bestClass = 0;
+      for (let classIndex = 1; classIndex < classCount; classIndex++) {
+        if (output.data[offset + classIndex] > output.data[offset + bestClass]) {
+          bestClass = classIndex;
+        }
+      }
+      prediction.push(CAPTCHA_ALPHABET[bestClass]);
     }
+
+    const captchaText = prediction.join("");
+    console.log(`本地模型识别结果: "${captchaText}"`);
+    return captchaText;
   } catch (error) {
-    console.error("外部API识别失败:", error.message);
-    throw new Error(`外部API识别失败: ${error.message}`);
+    console.error("本地验证码识别失败:", error.message);
+    throw new Error(`本地验证码识别失败: ${error.message}`);
   }
 }
 
@@ -110,6 +144,9 @@ async function main() {
     });
   };
 
+  const randomTypingDelay = (min = 70, max = 160) =>
+    Math.floor(Math.random() * (max - min + 1)) + min;
+
   // 仅在流程异常时保存页面截图
   const screenshot = async (name) => {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -134,6 +171,7 @@ async function main() {
     console.log("步骤2: 点击登录按钮");
     const loginButton = page.locator('a:has-text("登录")').first();
     if (await loginButton.isVisible()) {
+      await randomDelay(500, 1500);
       await loginButton.click();
       await page.waitForLoadState("networkidle");
       await randomDelay(1000, 2000);
@@ -151,7 +189,7 @@ async function main() {
     if (await usernameInput.isVisible()) {
       await usernameInput.click();
       await randomDelay(200, 500);
-      await usernameInput.type(username, { delay: 100 });
+      await usernameInput.type(username, { delay: randomTypingDelay() });
       await randomDelay(500, 1000);
     } else {
       throw new Error("未找到用户名输入框");
@@ -161,6 +199,7 @@ async function main() {
     console.log("步骤4: 点击下一步");
     const nextButton = page.locator('button:has-text("下一步")').first();
     if (await nextButton.isVisible()) {
+      await randomDelay(500, 1200);
       await nextButton.click();
       await page.waitForLoadState("networkidle");
       await randomDelay(1000, 2000);
@@ -176,7 +215,7 @@ async function main() {
     if (await passwordInput.isVisible()) {
       await passwordInput.click();
       await randomDelay(200, 500);
-      await passwordInput.type(password, { delay: 100 });
+      await passwordInput.type(password, { delay: randomTypingDelay() });
       await randomDelay(500, 1000);
     } else {
       throw new Error("未找到密码输入框");
@@ -211,6 +250,10 @@ async function main() {
         }
       }
 
+      if (!captchaImage) {
+        throw new Error("未找到验证码图片");
+      }
+
       // 直接读取页面中已加载的验证码图片，避免重新请求验证码
       console.log("读取当前页面验证码图片进行识别");
 
@@ -222,13 +265,11 @@ async function main() {
         // 使用当前页面图片的Base64数据进行识别
         const captchaCode = await recognizeCaptcha(captchaImageData);
 
-          // 填写验证码
-          await captchaInput.click();
-          await randomDelay(200, 500);
-          await captchaInput.type(captchaCode, { delay: 100 });
-          await randomDelay(500, 1000);
+        // 填写验证码
+        await captchaInput.fill(captchaCode);
+        await randomDelay(500, 1000);
 
-          console.log(`✅ 验证码识别并填写成功: ${captchaCode}`);
+        console.log(`✅ 验证码识别并填写成功: ${captchaCode}`);
 
       } catch (error) {
         console.error("验证码识别失败，尝试手动处理");
@@ -249,7 +290,7 @@ async function main() {
 
         await captchaInput.click();
         await randomDelay(200, 500);
-        await captchaInput.type(manualCaptchaCode, { delay: 100 });
+        await captchaInput.type(manualCaptchaCode, { delay: randomTypingDelay() });
         await randomDelay(500, 1000);
       }
     } else {
@@ -262,6 +303,7 @@ async function main() {
       .locator('button:has-text("使用账户密码登录")')
       .first();
     if (await loginButton2.isVisible()) {
+      await randomDelay(700, 1600);
       await loginButton2.click();
       await page.waitForLoadState("networkidle");
       await randomDelay(1000, 2000);
@@ -285,11 +327,22 @@ async function main() {
         await randomDelay(800, 1500);
 
         const retryImage = page.locator('img[src*="captcha"]:visible').first();
+        const previousCaptchaSrc = await retryImage.getAttribute("src");
         await retryImage.waitFor({ state: "visible", timeout: 5000 });
+        await page.waitForFunction(
+          (oldSrc) => {
+            const image = document.querySelector('img[src*="captcha"]');
+            return image && image.src !== oldSrc && image.complete && image.naturalWidth > 0;
+          },
+          previousCaptchaSrc,
+          { timeout: 5000 },
+        );
         const retryImageData = await readLoadedCaptchaImage(retryImage);
         const retryCode = await recognizeCaptcha(retryImageData);
+        await randomDelay(300, 900);
         await captchaInput.fill(retryCode);
         console.log(`重新填写验证码: ${retryCode}`);
+        await randomDelay(700, 1600);
         await loginButton2.click();
         await randomDelay(1000, 2000);
       }
@@ -300,6 +353,10 @@ async function main() {
         .first();
       if (await remainingCaptchaError.isVisible().catch(() => false)) {
         throw new Error(`验证码连续 ${maxRetries} 次识别错误，停止签到`);
+      }
+
+      if (await loginButton2.isVisible().catch(() => false)) {
+        throw new Error("登录未成功，仍停留在登录页面");
       }
     } else {
       throw new Error("未找到登录按钮");
@@ -316,6 +373,7 @@ async function main() {
 
     if (await checkinButton.isVisible()) {
       console.log("找到点击打卡按钮，开始打卡");
+      await randomDelay(700, 1800);
       await checkinButton.click();
       await randomDelay(1000, 2000);
       const checkinResult = await page.textContent("body");

@@ -1,71 +1,79 @@
-# Gogei's luogu-auto-checkin
+# 洛谷自动打卡
 
-使用 GitHub Actions 和 Playwright 浏览器自动化实现洛谷自动签到，包含反反爬虫措施。
+使用 Playwright 登录洛谷并完成每日自动打卡。验证码使用本地 ONNX 模型识别，图片不会发送到远程 OCR 服务。
 
-## 功能特点
+## 功能
 
-- 🚀 使用 Playwright 浏览器自动化
-- 🛡️ 内置反反爬虫措施
-- 📸 自动截图记录过程
-- 🔐 **自动验证码识别**（OCR）
-- 🔐 支持验证码手动处理（备用）
-- ⏰ 支持定时自动执行
+- 自动打开洛谷、登录并点击“点击打卡”
+- 从浏览器当前已加载的验证码图片读取像素，不重新请求验证码
+- 使用本地 ONNX 模型识别 4 位验证码
+- 验证码错误时自动刷新并重试，最多 8 次
+- 识别失败时支持终端手动输入
+- 支持 GitHub Actions 定时执行
+- 只在异常时保存页面截图
 
-## 使用步骤
+## 环境要求
 
-### 本地测试
+- Node.js 20 或更高版本
+- 可访问洛谷的网络环境
+- 洛谷账号和密码
 
-#### 手动验证码处理版本
-1. 复制 `.env.example` 为 `.env`
-2. 编辑 `.env` 文件，填入你的洛谷账号密码
-3. 运行 `npm install` 安装依赖
-4. 运行 `node index.js` 测试签到
+## 本地运行
 
-#### 自动验证码识别版本
-1. 复制 `.env.example` 为 `.env`
-2. 编辑 `.env` 文件，填入你的洛谷账号密码
-3. 运行 `npm install` 安装依赖
-4. 运行 `npm run checkin-auto` 测试自动验证码识别签到
+在项目根目录创建 `.env`：
 
-### GitHub Actions 部署
+```env
+LUOGU_USERNAME=你的洛谷账号
+LUOGU_PASSWORD=你的洛谷密码
+```
 
-1. 新建一个 GitHub 仓库并推送本项目。
-2. 在仓库 `Settings -> Secrets and variables -> Actions` 中新增两个 secret：
-   - `LUOGU_USERNAME`：洛谷账号
-   - `LUOGU_PASSWORD`：洛谷密码
-3. 确保 Actions 已启用。
-4. 在 Actions 页面手动运行一次 `Luogu Daily Check-in` 验证。
+安装依赖并运行：
 
-## 反反爬虫措施
+```bash
+npm install
+npx playwright install chromium
+npm run checkin
+```
 
-本脚本包含以下反反爬虫措施：
+项目只有一个运行入口：
 
-1. **随机延迟**：模拟人类操作间隔
-2. **随机鼠标移动**：模拟真实用户行为
-3. **真实浏览器头**：使用完整的浏览器请求头
-4. **渐进式操作**：避免机械化操作
-5. **截图记录**：便于调试和问题排查
+```bash
+npm run checkin
+```
 
-## 验证码处理
+## 验证码模型
 
-当遇到图形验证码时：
+模型文件位于 [models/luogu-captcha-int8.onnx](models/luogu-captcha-int8.onnx)。模型输入为 `90x35` 的 RGB 图片，输出 4 位字母或数字。
 
-1. 脚本会自动截图保存验证码
-2. 在终端提示输入验证码
-3. 手动输入后继续自动流程
+脚本的处理流程如下：
 
-## 定时说明
+1. Playwright 找到页面中已经加载的验证码图片。
+2. 在页面内通过 Canvas 读取原始图片像素。
+3. Node.js 使用 `sharp` 调整为 `90x35 RGB`。
+4. `onnxruntime-node` 在本地运行模型。
+5. 识别结果填写回验证码输入框。
 
-- 工作流文件：`.github/workflows/daily-checkin.yml`
-- 当前 cron：`0 0 * * *`（每天 00:00 UTC，即北京时间 08:00）
+模型来源于 [langningchen/luoguCaptcha](https://github.com/langningchen/luoguCaptcha)，模型文件使用 AGPL-3.0 许可证。再次发布或分发项目时，请遵守对应许可证要求。
 
-如需调整时间，可修改 cron 表达式。
+## GitHub Actions
 
-## 故障排除
+工作流文件为 `.github/workflows/daily-checkin.yml`，默认每天 `00:00 UTC` 运行，也可以在 Actions 页面手动运行。
 
-如果签到失败，请检查：
+在仓库的 `Settings -> Secrets and variables -> Actions` 中配置：
 
-1. 截图文件了解具体失败环节
-2. 网络连接是否正常
-3. 账号密码是否正确
-4. 是否需要手动处理验证码
+- `LUOGU_USERNAME`：洛谷账号
+- `LUOGU_PASSWORD`：洛谷密码
+
+工作流会安装 Chromium、执行 `npm run checkin`，并在失败时上传 `screenshots/` 目录作为调试附件。
+
+## 故障排查
+
+验证码或登录失败时：
+
+1. 查看终端输出中的识别结果和重试次数。
+2. 检查 `models/luogu-captcha-int8.onnx` 是否存在。
+3. 确认 `LUOGU_USERNAME` 和 `LUOGU_PASSWORD` 正确。
+4. 检查网络是否能访问洛谷。
+5. 查看 `screenshots/` 中的异常截图。
+
+不要把 `.env`、账号密码或包含登录状态的截图提交到仓库。
